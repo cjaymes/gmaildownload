@@ -3,3 +3,4 @@ cred*.json
 token*.json
 config.json
 *.code-workspace
+messages

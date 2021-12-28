@@ -1,7 +1,10 @@
+'use strict';
+
 const fs = require('fs');
 const readline = require('readline');
 const {google} = require('googleapis');
 const config = require('./config');
+const { getSystemErrorMap } = require('util');
 
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
@@ -9,6 +12,8 @@ const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 // created automatically when the authorization flow completes for the first
 // time.
 const TOKEN_PATH = 'token.json';
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // Load client secrets from a local file.
 fs.readFile('credentials.json', (err, content) => {
@@ -101,12 +106,85 @@ async function getMessageIDs(gmail, q, pageToken) {
     return messageIDs;
 }
 
-function doTheThing(auth) {
+function getMessage(gmail, id) {
+  return new Promise((resolve, reject) => {
+    gmail.users.messages.get({userId: 'me', id: id, format: 'full'}, (err, res) => {
+      if(err) {
+        reject(err);
+      } else {
+        resolve(res.data);
+      }
+    });
+  });
+}
+
+function getMessagePartBody(mimeType, body) {
+  let s = '';
+  if (body && body.size && body.size > 0) {
+    if (body.attachmentId) {
+      s += `Attachment ID: ${body.attachmentId}\n`
+    } else {
+      // must have data
+      if (mimeType === 'text/plain') {
+        const b = Buffer.from(body.data, 'base64');
+        s += `${b.toString('utf-8')}\n`;
+      } else {
+        s += `${mimeType} Body Data: ${body.data}\n`;
+      }
+    }
+  }
+  return s;
+}
+
+function getMessagePart(msg) {
+  let s = '';
+  msg.headers.forEach((header) => {
+    s += `${header.name}: ${header.value}\n`;
+  });
+
+  s += '\n';
+  
+  s += getMessagePartBody(msg.mimeType, msg.body);
+  
+  if (msg.parts) {
+    msg.parts.forEach((part) => {
+      s += getMessagePart(part);
+    });
+  }
+
+  return s;
+}
+
+async function doTheThing(auth) {
     const gmail = google.gmail({ version: 'v1', auth });
-    config.emailAddresses.forEach(async (email) => {
-      console.log(`Messages to or from ${email}:`);
-      const messageIDs = await getMessageIDs(gmail, `from:${email}`, null);
-      messageIDs.push(... await getMessageIDs(gmail, `to:${email}`, null));
-      console.log('Found messages: ' + messageIDs.join(' '));
+
+    const messageIDs = [];
+    for (let i = 0; i < config.emailAddresses.length; i++) {
+      console.log(`Messages to or from ${config.emailAddresses[i]}:`);
+      messageIDs.push(... await getMessageIDs(gmail, `from:${config.emailAddresses[i]}`, null));
+      messageIDs.push(... await getMessageIDs(gmail, `to:${config.emailAddresses[i]}`, null));
+    }
+
+    console.log('Found messages: ' + messageIDs.join(' '));
+    await sleep(10);
+    messageIDs.forEach(async (id) => {
+      let sleepTime = 1000;
+      let done = false;
+      while(!done) {
+        try {
+          const msg = await getMessage(gmail, id);
+          fs.writeFileSync(`messages/${id}.txt`, getMessagePart(msg.payload));
+          console.log(`Wrote messages/${id}.txt`);
+          await sleep(sleepTime);
+          done = true;
+        } catch (err) {
+          if (err && err.code && err.code === 429) {
+            sleepTime = sleepTime * 2;
+          } else {
+            console.error(err);
+            process.exit(1);
+          }
+        }
+      }
     });
 }
