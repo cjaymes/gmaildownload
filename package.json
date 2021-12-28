@@ -3,13 +3,18 @@
   "version": "1.0.0",
   "description": "gmail downloader",
   "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cjaymes/gmaildownload.git"
+  },
   "dependencies": {
-    "googleapis": "^39.2.0"
+    "googleapis": "^39.2.0",
+    "pdfkit": "^0.13.0"
   },
   "devDependencies": {},
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Casey Jaymes",
-  "license": "GPL"
+  "license": "LGPL-3.0-or-later"
 }
