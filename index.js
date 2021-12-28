@@ -67,7 +67,9 @@ function getNewToken(oAuth2Client, callback) {
   });
 }
 
-async function printMessages(gmail, q, pageToken) {
+async function getMessageIDs(gmail, q, pageToken) {
+    const messageIDs = [];
+
     const data = await new Promise((resolve, reject) => {
         const params = {
             userId: 'me',
@@ -86,23 +88,25 @@ async function printMessages(gmail, q, pageToken) {
     });
 
     const messages = data.messages;
-    if (messages.length) {
-        console.log(`${messages.length} messages ${q} with ${data.nextPageToken}:`);
-        console.log(messages.map(x => x.id).join(' '));
+    if (messages && messages.length) {
+        console.debug(`${messages.length} messages ${q}; next ${data.nextPageToken}:`);
+        messageIDs.push(... messages.map(x => x.id));
     } else {
-        console.log('No messages found.');
+        console.debug('No messages found.');
     }
-    console.log('');
 
     if (data.nextPageToken) {
-        printMessages(gmail, q, data.nextPageToken);
+      messageIDs.push(... await getMessageIDs(gmail, q, data.nextPageToken));
     }
+    return messageIDs;
 }
 
 function doTheThing(auth) {
     const gmail = google.gmail({ version: 'v1', auth });
-    config.emailAddresses.forEach((email) => {
-        printMessages(gmail, `from:${email}`, null);
-        printMessages(gmail, `to:${email}`, null);
+    config.emailAddresses.forEach(async (email) => {
+      console.log(`Messages to or from ${email}:`);
+      const messageIDs = await getMessageIDs(gmail, `from:${email}`, null);
+      messageIDs.push(... await getMessageIDs(gmail, `to:${email}`, null));
+      console.log('Found messages: ' + messageIDs.join(' '));
     });
 }
