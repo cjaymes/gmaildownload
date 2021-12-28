@@ -2,3 +2,4 @@ node_modules
 cred*.json
 token*.json
 config.json
+*.code-workspace
